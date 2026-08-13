@@ -1,0 +1,136 @@
+{
+    "_notes": {
+        "purpose": "Single source of truth for the DINOv3 + Q-Former geolocalization pipeline. attributes.py is NOT used by this pipeline.",
+        "mid_training_eval": "disabled_by_design -- see evaluation.disable_mid_training_eval (must stay true)",
+        "checkpoint_policy": "trainable_qformer_weights_only -- frozen DINOv3 / text-encoder state dicts are NEVER written to disk",
+        "checkpoint_access": "facebook/dinov3-* checkpoints are gated on Hugging Face -- request access on each model page, then `huggingface-cli login` locally before training.",
+        "checkpoint_choice_rationale": "Ground branch uses the web-pretrained DINOv3 (LVD-1689M, natural images) since ground-level photos are everyday scenes. Satellite branch uses the DINOv3 SAT-493M checkpoint, pretrained directly on 493M Maxar satellite tiles -- a much better feature prior for overhead imagery than a web-pretrained backbone. Both are ViT-L/16 (1024-dim) so the two branches are matched in scale/capacity.",
+        "text_encoder_choice_rationale": "Default is T5 (flan-t5-large encoder) rather than SigLIP2, because the actual captions in this dataset are long, multi-sentence GPT-4o-generated scene descriptions (commonly 80-110+ words) that would mostly get truncated by SigLIP2's hard 64-token architectural cap (its text tower's position-embedding table only has 64 slots -- this is not a tunable setting, it's how the model was trained). T5's encoder uses relative position bias with no comparable hard short-context wall, so it comfortably handles these caption lengths. The Query Q-Former -- not the frozen text encoder -- is what learns to fuse text with the ground image, so the text encoder does not need to already be image-aligned (T5 never was, and that's fine here). SigLIP2 remains a supported option below (set text_encoder_type to 'siglip2') for shorter-caption datasets."
+    },
+
+    "experiment": {
+        "exp_id": "geo_dino_siglip_qformer",
+        "description": "Ground(+text) query searches a satellite image via two Q-Former cross-attention stages",
+        "seed": 42
+    },
+
+    "model": {
+        "dino_ground_checkpoint": "facebook/dinov3-vitl16-pretrain-lvd1689m",
+        "dino_satellite_checkpoint": "facebook/dinov3-vitl16-pretrain-sat493m",
+
+        "text_encoder_type": "siglip2",
+        "text_encoder_checkpoint": "google/siglip2-base-patch16-224",
+        "_text_encoder_alternatives": {
+            "t5": "google/flan-t5-large (hidden_dim 1024) or google/t5-large (hidden_dim 1024) -- relative position bias, no hard short-context cap. text_max_length below is just a truncation safety margin.",
+            "siglip2": "google/siglip2-base-patch16-224 (hidden_dim 768) -- the model FORCES max_length=64 whenever text_encoder_type=='siglip2', regardless of data.text_max_length below, since that's a hard architectural limit, not a config knob."
+        },
+
+        "freeze_dino": true,
+        "freeze_text_encoder": true,
+
+        "embed_dim": 768,
+        "dino_ground_hidden_dim": 1024,
+        "dino_satellite_hidden_dim": 1024,
+        "text_encoder_hidden_dim": 768,
+
+        "remove_cls_token": true,
+        "remove_register_tokens": true,
+        "num_register_tokens": 4,
+
+        "query_qformer": {
+            "num_query_tokens": 32,
+            "num_layers": 4,
+            "num_heads": 8,
+            "ffn_dim": 3072,
+            "dropout": 0.1
+        },
+
+        "sat_detective_qformer": {
+            "num_layers": 4,
+            "num_heads": 8,
+            "ffn_dim": 3072,
+            "dropout": 0.1
+        },
+
+        "stage1_satellite_pool": "mean"
+    },
+
+    "data": {
+        "dataset_name": "CVUSA",
+        "data_root": "/home/ra164195/Datasets/Geolocal/CVUSA_Cropped/CVUSA",
+        "train_csv": "splits/train-19zl.csv",
+        "val_csv": "splits/val-19zl.csv",
+        "lang": "T1",
+
+        "image_size_ground": 224,
+        "image_size_satellite": 320,
+        "_image_size_note": "Satellite crop is larger (320 -> 20x20=400 patches @ patch16) than ground (224 -> 14x14=196 patches) to give the Patch-MIL stage finer-grained regions to search over.",
+
+        "ground_norm_mean": [0.485, 0.456, 0.406],
+        "ground_norm_std": [0.229, 0.224, 0.225],
+        "_ground_norm_note": "Standard ImageNet stats, matching the DINOv3 LVD-1689M (web-pretrained) checkpoint.",
+
+        "satellite_norm_mean": [0.430, 0.411, 0.296],
+        "satellite_norm_std": [0.213, 0.156, 0.143],
+        "_satellite_norm_note": "Official stats for the DINOv3 SAT-493M checkpoint, per facebookresearch/dinov3.",
+
+        "text_max_length": 64,
+        "_text_max_length_note": "Truncation safety margin for T5 (no hard cap) -- set comfortably above your longest real captions in tokens, not words. Ignored/overridden to 64 if text_encoder_type is switched to 'siglip2'.",
+        "num_workers": 6
+    },
+
+    "training": {
+        "batch_size": 150,
+
+        "stage_schedule": {
+            "stage1_epochs": 20,
+            "total_epochs": 40,
+            "_rule": "epoch < stage1_epochs -> stage 1, else stage 2. Fixed by epoch count, not validation."
+        },
+
+        "optimizer": {
+            "name": "adamw",
+            "lr": 1e-4,
+            "weight_decay": 0.01,
+            "betas": [0.9, 0.999]
+        },
+
+        "scheduler": {
+            "name": "cosine",
+            "warmup_epochs": 1
+        },
+
+        "grad_clip_norm": 1.0,
+        "use_mixed_precision": true
+    },
+
+    "loss": {
+        "stage1_temperature": 0.07,
+        "stage2_temperature": 0.07,
+        "patch_mil_softmax_beta": 10.0,
+        "stage2_detective_retrieval_weight": 0.5,
+        "_stage2_detective_retrieval_weight_note": "auxiliary in-batch contrastive weight on the Satellite Detective Q-Former's own (query_embedding, selected satellite region embedding) outputs -- gives the Detective module a gradient signal beyond the patch-MIL loss. Set to 0.0 to disable.",
+        "stage2_global_retrieval_weight": 0.2
+    },
+
+    "evaluation": {
+        "disable_mid_training_eval": true,
+        "eval_after_training_only": true,
+        "eval_mode": "stage1_global",
+        "topk": [1, 5, 10]
+    },
+
+    "checkpointing": {
+        "save_dir": "weights/geo_dino_siglip_qformer",
+        "save_only_trainable_weights": true,
+        "save_every_n_epochs": 1,
+        "save_config_copy": true
+    },
+
+    "logging": {
+        "log_dir": "logs/geo_dino_siglip_qformer",
+        "info_dir": "info/geo_dino_siglip_qformer",
+        "log_every_n_steps": 50,
+        "print_trainable_param_names_at_startup": true
+    }
+}

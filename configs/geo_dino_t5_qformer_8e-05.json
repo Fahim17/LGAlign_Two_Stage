@@ -1,0 +1,173 @@
+{
+    "_notes": {
+        "purpose": "Single source of truth for the DINOv3 + Q-Former geolocalization pipeline. attributes.py is NOT used by this pipeline.",
+        "mid_training_eval": "disabled_by_design -- see evaluation.disable_mid_training_eval (must stay true)",
+        "checkpoint_policy": "trainable_qformer_weights_only -- frozen DINOv3 / text-encoder state dicts are NEVER written to disk",
+        "checkpoint_access": "facebook/dinov3-* checkpoints are gated on Hugging Face -- request access on each model page, then `huggingface-cli login` locally before training.",
+        "checkpoint_choice_rationale": "Ground branch uses the web-pretrained DINOv3 (LVD-1689M, natural images) since ground-level photos are everyday scenes. Satellite branch uses the DINOv3 SAT-493M checkpoint, pretrained directly on 493M Maxar satellite tiles -- a much better feature prior for overhead imagery than a web-pretrained backbone. Both are ViT-L/16 (1024-dim) so the two branches are matched in scale/capacity.",
+        "text_encoder_choice_rationale": "Default is T5 (flan-t5-large encoder) rather than SigLIP2, because the actual captions in this dataset are long, multi-sentence GPT-4o-generated scene descriptions (commonly 80-110+ words) that would mostly get truncated by SigLIP2's hard 64-token architectural cap (its text tower's position-embedding table only has 64 slots -- this is not a tunable setting, it's how the model was trained). T5's encoder uses relative position bias with no comparable hard short-context wall, so it comfortably handles these caption lengths. The Query Q-Former -- not the frozen text encoder -- is what learns to fuse text with the ground image, so the text encoder does not need to already be image-aligned (T5 never was, and that's fine here). SigLIP2 remains a supported option below (set text_encoder_type to 'siglip2') for shorter-caption datasets.",
+        "stage2_design_rationale": "Stage 2 no longer reranks using frozen Stage 1 query tokens directly. It has its own trainable copy of the Stage 1 query pathway (stage2_proj_ground/stage2_proj_text/stage2_query_qformer), warm-started from Stage 1 weights (see model.GeoDinoSiglipQFormer.initialize_stage2_from_stage1(), gated by training.stage2_init_from_stage1 below) and then trained independently with the local region-voting objective -- it is a one-time weight copy, not weight tying."
+    },
+    "experiment": {
+        "exp_id": "geo_dino_t5_qformer",
+        "description": "Ground(+text) query searches a satellite image via Grounded Query Former + Satellite Region Matcher",
+        "seed": 42
+    },
+    "model": {
+        "dino_ground_checkpoint": "facebook/dinov3-vitl16-pretrain-lvd1689m",
+        "dino_satellite_checkpoint": "facebook/dinov3-vitl16-pretrain-sat493m",
+        "text_encoder_type": "t5",
+        "text_encoder_checkpoint": "google/flan-t5-large",
+        "_text_encoder_alternatives": {
+            "t5": "google/flan-t5-large (hidden_dim 1024) or google/t5-large (hidden_dim 1024) -- relative position bias, no hard short-context cap. text_max_length below is just a truncation safety margin.",
+            "siglip2": "google/siglip2-base-patch16-224 (hidden_dim 768) -- the model FORCES max_length=64 whenever text_encoder_type=='siglip2', regardless of data.text_max_length below, since that's a hard architectural limit, not a config knob."
+        },
+        "freeze_dino": true,
+        "freeze_text_encoder": true,
+        "embed_dim": 768,
+        "dino_ground_hidden_dim": 1024,
+        "dino_satellite_hidden_dim": 1024,
+        "text_encoder_hidden_dim": 1024,
+        "remove_cls_token": true,
+        "remove_register_tokens": true,
+        "num_register_tokens": 4,
+        "query_qformer": {
+            "num_query_tokens": 32,
+            "num_layers": 4,
+            "num_heads": 8,
+            "ffn_dim": 3072,
+            "dropout": 0.1
+        },
+        "stage2_query_qformer": {
+            "_note": "Stage 2's own trainable query pathway -- an exact architectural copy of query_qformer above, warm-started from it via initialize_stage2_from_stage1() (see training.stage2_init_from_stage1), then trained independently. Falls back to query_qformer's config if this block is omitted.",
+            "num_query_tokens": 32,
+            "num_layers": 4,
+            "num_heads": 8,
+            "ffn_dim": 3072,
+            "dropout": 0.1
+        },
+        "stage2_region_voting_qformer": {
+            "_note": "Renamed from stage2_satellite_qformer -- this is the local region-voting matcher that takes stage2_query_qformer's tokens and stage2_proj_satellite's patch tokens. Old configs using the stage2_satellite_qformer key still work (see models/custom_model.py).",
+            "num_layers": 2,
+            "num_heads": 8,
+            "ffn_dim": 2048,
+            "dropout": 0.1,
+            "use_token_gating": true
+        },
+        "stage1_satellite_pool": "mean"
+    },
+    "data": {
+        "dataset_name": "CVUSA",
+        "data_root": "/home/ra164195/Datasets/Geolocal/CVUSA_Cropped/CVUSA",
+        "train_csv": "splits/train-19zl.csv",
+        "val_csv": "splits/val-19zl.csv",
+        "lang": "T1",
+        "image_size_ground": 224,
+        "image_size_satellite": 320,
+        "_image_size_note": "Satellite crop is larger (320 -> 20x20=400 patches @ patch16) than ground (224 -> 14x14=196 patches) to give the Patch-MIL stage finer-grained regions to search over.",
+        "ground_norm_mean": [
+            0.485,
+            0.456,
+            0.406
+        ],
+        "ground_norm_std": [
+            0.229,
+            0.224,
+            0.225
+        ],
+        "_ground_norm_note": "Standard ImageNet stats, matching the DINOv3 LVD-1689M (web-pretrained) checkpoint.",
+        "satellite_norm_mean": [
+            0.43,
+            0.411,
+            0.296
+        ],
+        "satellite_norm_std": [
+            0.213,
+            0.156,
+            0.143
+        ],
+        "_satellite_norm_note": "Official stats for the DINOv3 SAT-493M checkpoint, per facebookresearch/dinov3.",
+        "text_max_length": 160,
+        "_text_max_length_note": "Truncation safety margin for T5 (no hard cap) -- set comfortably above your longest real captions in tokens, not words. Ignored/overridden to 64 if text_encoder_type is switched to 'siglip2'.",
+        "num_workers": 10
+    },
+    "training": {
+        "batch_size": 150,
+        "stage2_lr": 8e-05,
+        "stage2_init_from_stage1": true,
+        "_stage2_init_from_stage1_note": "When true (default), model.initialize_stage2_from_stage1() is called once before Stage 2 training begins (both on the natural Stage 1 -> Stage 2 transition and on --resume-from-stage1), copying proj_ground/proj_text/query_qformer weights into stage2_proj_ground/stage2_proj_text/stage2_query_qformer. Set to false to let Stage 2's query pathway train from its own random initialization instead.",
+        "text_dropout_prob": 0.2,
+        "stage_schedule": {
+            "stage1_epochs": 20,
+            "total_epochs": 40,
+            "_rule": "epoch < stage1_epochs -> stage 1, else stage 2 -- but Stage 2's actual run length is ALWAYS (total_epochs - stage1_epochs), counted from wherever Stage 2 starts, even if Stage 1 overran stage1_epochs (e.g. via --resume-from-stage1 on a later checkpoint)."
+        },
+        "optimizer": {
+            "name": "adamw",
+            "lr": 0.0001,
+            "weight_decay": 0.01,
+            "betas": [
+                0.9,
+                0.999
+            ]
+        },
+        "scheduler": {
+            "name": "cosine",
+            "warmup_epochs": 1
+        },
+        "grad_clip_norm": 1.0,
+        "use_mixed_precision": true,
+        "stage2_region_voting": {
+            "enabled": true,
+            "freeze_stage1_after_stage1": true,
+
+            "hard_candidate_pool_k": 200,
+            "train_candidates_per_query": 16,
+            "stage2_batch_size": 24,
+            "_stage2_batch_size_note": "Independent from training.batch_size (Stage 1's). Stage 2's per-step memory is stage2_batch_size * train_candidates_per_query satellite encodes through frozen DINOv3 -- e.g. 16*32=512, vs 150 (Stage 1's batch_size) -- so this is deliberately a separate, usually much smaller, knob.",
+            "mining_batch_size": 256,
+            "_mining_batch_size_note": "No-grad encoding pass only (no backward graph, no optimizer state) -- can usually run much larger than training.batch_size. Falls back to training.batch_size if omitted.",
+
+            "vote_beta": 10.0,
+            "region_window_size": 3,
+            "region_pooling": "max",
+
+            "positive_entropy_weight": 0.02,
+            "negative_entropy_weight": 0.10,
+            "negative_peak_weight": 0.10,
+
+            "satellite_shift_pixels": 32,
+            "candidate_chunk_size": 32
+        }
+    },
+    "loss": {
+        "stage1_temperature": 0.07,
+        "stage2_temperature": 0.07,
+        "stage2_detective_retrieval_weight": 0.0,
+        "_stage2_detective_retrieval_weight_note": "Deprecated -- old pooled-embedding Stage 2 contrastive loss replaced by region-voting loss; weight forced to 0.0, kept only for backward-compat with old checkpoints/configs.",
+        "stage2_global_retrieval_weight": 0.0,
+        "_stage2_global_retrieval_weight_note": "Deprecated -- see stage2_detective_retrieval_weight note. Stage 2 now trains exclusively via RegionVotingLoss (see training.stage2_region_voting)."
+    },
+    "evaluation": {
+        "disable_mid_training_eval": true,
+        "eval_after_training_only": true,
+        "eval_mode": "stage1_global",
+        "topk": [
+            1,
+            5,
+            10
+        ]
+    },
+    "checkpointing": {
+        "save_dir": "weights/geo_dino_t5_qformer",
+        "save_only_trainable_weights": true,
+        "save_every_n_epochs": 1,
+        "save_config_copy": true
+    },
+    "logging": {
+        "log_dir": "logs/geo_dino_t5_qformer",
+        "info_dir": "info/geo_dino_t5_qformer",
+        "log_every_n_steps": 50,
+        "print_trainable_param_names_at_startup": true
+    }
+}

@@ -1,0 +1,153 @@
+{
+    "_notes": {
+        "purpose": "Image-only DINOv3 + Q-Former geolocalization experiment on VIGOR.",
+        "mid_training_eval": "disabled_by_design -- evaluation.disable_mid_training_eval must remain true",
+        "checkpoint_policy": "Only trainable Q-Former-related weights are saved; frozen encoder weights are reloaded from their pretrained checkpoints.",
+        "checkpoint_access": "The facebook/dinov3-* checkpoints are gated on Hugging Face; request access and log in before training."
+    },
+    "experiment": {
+        "exp_id": "geo_dino_t5_qformer_vigor_image_only",
+        "description": "VIGOR ground-image-only query searches satellite imagery using global retrieval and region-voting reranking",
+        "seed": 42
+    },
+    "model": {
+        "query_modality": "image",
+        "dino_ground_checkpoint": "facebook/dinov3-vitl16-pretrain-lvd1689m",
+        "dino_satellite_checkpoint": "facebook/dinov3-vitl16-pretrain-sat493m",
+        "text_encoder_type": "t5",
+        "text_encoder_checkpoint": "google/flan-t5-large",
+        "freeze_dino": true,
+        "freeze_text_encoder": true,
+        "embed_dim": 768,
+        "dino_ground_hidden_dim": 1024,
+        "dino_satellite_hidden_dim": 1024,
+        "text_encoder_hidden_dim": 1024,
+        "remove_cls_token": true,
+        "remove_register_tokens": true,
+        "num_register_tokens": 4,
+        "query_qformer": {
+            "num_query_tokens": 32,
+            "num_layers": 4,
+            "num_heads": 8,
+            "ffn_dim": 3072,
+            "dropout": 0.1
+        },
+        "stage2_query_qformer": {
+            "num_query_tokens": 32,
+            "num_layers": 4,
+            "num_heads": 8,
+            "ffn_dim": 3072,
+            "dropout": 0.1
+        },
+        "stage2_region_voting_qformer": {
+            "num_layers": 2,
+            "num_heads": 8,
+            "ffn_dim": 2048,
+            "dropout": 0.1,
+            "use_token_gating": true
+        },
+        "stage1_satellite_pool": "mean"
+    },
+    "data": {
+        "dataset_name": "VIGOR",
+        "data_root": "/data/Research/Dataset/VIGOR",
+        "train_csv": "splits/VIGOR_train.csv",
+        "val_csv": "splits/VIGOR_test.csv",
+        "lang": "T1",
+        "image_size_ground": 224,
+        "image_size_satellite": 224,
+        "_image_size_note": "Both branches use 224x224 inputs for the DINOv3 ViT-L/16 encoders.",
+        "ground_norm_mean": [
+            0.485,
+            0.456,
+            0.406
+        ],
+        "ground_norm_std": [
+            0.229,
+            0.224,
+            0.225
+        ],
+        "satellite_norm_mean": [
+            0.43,
+            0.411,
+            0.296
+        ],
+        "satellite_norm_std": [
+            0.213,
+            0.156,
+            0.143
+        ],
+        "text_max_length": 160,
+        "_text_note": "Text fields remain available to the dataset API, but model.query_modality=image excludes text tokens from the query.",
+        "num_workers": 10
+    },
+    "training": {
+        "batch_size": 150,
+        "stage2_lr": 0.00005,
+        "stage2_init_from_stage1": true,
+        "text_dropout_prob": 0.0,
+        "stage_schedule": {
+            "stage1_epochs": 20,
+            "total_epochs": 40
+        },
+        "optimizer": {
+            "name": "adamw",
+            "lr": 0.0001,
+            "weight_decay": 0.01,
+            "betas": [
+                0.9,
+                0.999
+            ]
+        },
+        "scheduler": {
+            "name": "cosine",
+            "warmup_epochs": 1
+        },
+        "grad_clip_norm": 1.0,
+        "use_mixed_precision": true,
+        "stage2_region_voting": {
+            "enabled": true,
+            "freeze_stage1_after_stage1": true,
+            "hard_candidate_pool_k": 200,
+            "train_candidates_per_query": 16,
+            "stage2_batch_size": 24,
+            "mining_batch_size": 256,
+            "vote_beta": 10.0,
+            "region_window_size": 3,
+            "region_pooling": "max",
+            "positive_entropy_weight": 0.02,
+            "negative_entropy_weight": 0.1,
+            "negative_peak_weight": 0.1,
+            "satellite_shift_pixels": 32,
+            "candidate_chunk_size": 32
+        }
+    },
+    "loss": {
+        "stage1_temperature": 0.07,
+        "stage2_temperature": 0.07,
+        "stage2_detective_retrieval_weight": 0.0,
+        "stage2_global_retrieval_weight": 0.0
+    },
+    "evaluation": {
+        "disable_mid_training_eval": true,
+        "eval_after_training_only": true,
+        "eval_mode": "stage1_global",
+        "topk": [
+            1,
+            5,
+            10
+        ]
+    },
+    "checkpointing": {
+        "save_dir": "weights/geo_dino_t5_qformer_vigor_image_only",
+        "save_only_trainable_weights": true,
+        "save_every_n_epochs": 1,
+        "save_config_copy": true
+    },
+    "logging": {
+        "log_dir": "logs/geo_dino_t5_qformer_vigor_image_only",
+        "info_dir": "info/geo_dino_t5_qformer_vigor_image_only",
+        "log_every_n_steps": 50,
+        "print_trainable_param_names_at_startup": true
+    }
+}
