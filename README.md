@@ -31,10 +31,4 @@ The manuscript currently lists the submission as anonymous. After author identit
 - the Code button URL when the repository is available;
 - the venue wording if the publication status changes.
 
-## Local preview
 
-```bash
-python3 -m http.server 8000
-```
-
-Then open `http://localhost:8000`.
