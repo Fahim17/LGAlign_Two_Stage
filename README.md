@@ -1,7 +1,40 @@
-# CVGL_Baseline
-I want to createa Qualitative Results with some selected images. The dataset is CVUSA. There will be 7 images. FIrst column will be the ground images followed by 5 columns for top 5 retrieval.
-Selected query image IDs: ['0014696', '0042062', '0041907', '0032946', '0036212', '0007872', '0028715']
-weights: "weights/geo_dino_t5_qformer_image_only/geo_dino_t5_qformer_image_only_epoch40_stage2.pt"
-The corrected retrieved satellite image border will be Green and wrong retrieved satellite image border will be red.
+# LG-Align Project Page
 
-Create a .py file that can make this figure. 
+A static GitHub Pages website for the paper **“LG-Align: Language-Guided Global Retrieval to Local Region Voting.”**
+
+## Files
+
+- `index.html` — project page
+- `style.css` — styling
+- `paper.pdf` — manuscript linked from the page
+- `assets/overview.png` — problem setup figure crop
+- `assets/method.png` — method figure crop
+- `assets/qualitative.png` — qualitative retrieval figure crop
+- `assets/voting.png` — region-voting visualization crop
+
+## Publish with GitHub Pages
+
+1. Create a new GitHub repository, for example `lg-align`.
+2. Upload all files and folders from this directory to the repository root.
+3. Open **Settings → Pages**.
+4. Under **Build and deployment**, choose **Deploy from a branch**.
+5. Select the `main` branch and `/ (root)`, then save.
+6. GitHub will publish the site at a URL similar to:
+   `https://YOUR-USERNAME.github.io/lg-align/`
+
+## Before making the page public
+
+The manuscript currently lists the submission as anonymous. After author identities are public, update:
+
+- the author/affiliation area if you decide to add one;
+- the BibTeX author field in `index.html`;
+- the Code button URL when the repository is available;
+- the venue wording if the publication status changes.
+
+## Local preview
+
+```bash
+python3 -m http.server 8000
+```
+
+Then open `http://localhost:8000`.
