@@ -1,218 +1,254 @@
 # LG-Align: Language-Guided Global Retrieval to Local Region Voting
 
-<!-- > **Anonymous GAIA @ ECCV 2026 Submission** -->
+[![Paper](https://img.shields.io/badge/Paper-PDF-b31b1b.svg)](paper/paper_1.pdf)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.x-ee4c2c.svg)](https://pytorch.org/)
 
-LG-Align is a two-stage framework for **cross-view image geolocalization under random limited field-of-view (FoV)**. Instead of assuming a north-aligned or panoramic ground query, LG-Align works with a randomly cropped **90° ground-view image** and augments it with a natural-language scene description.
+Official implementation of **LG-Align**, a two-stage language-guided framework for cross-view geolocalization with randomly oriented, limited-field-of-view ground images.
 
-The key idea is simple:
+Given a random 90° crop from a ground panorama and a natural-language description of the visible scene, LG-Align retrieves the corresponding satellite image. It first performs efficient global retrieval, then re-ranks the strongest candidates by locating query-consistent regions within each satellite image.
 
-1. **Retrieve globally** using fused ground-image and language features.
-2. **Re-rank locally** by finding the satellite region that best matches the limited-FoV query.
+> **Paper:** *LG-Align: Language-Guided Global Retrieval to Local Region Voting*  
+> GAIA @ ECCV 2026 submission · [Read the paper](paper/paper_1.pdf)
 
----
+## Highlights
 
-## Overview
-
-Cross-view geolocalization matches a ground-level image to its corresponding satellite image. This becomes significantly harder when the ground query:
-
-- covers only a small portion of the scene,
-- can face an arbitrary azimuth direction,
-- has no reliable orientation prior, and
-- shares limited direct visual appearance with the overhead view.
-
-LG-Align addresses this ambiguity by combining **visual evidence**, **language semantics**, and **local region voting**.
-
-### Main Contributions
-
-- A challenging **random 90° limited-FoV CVUSA setting** without fixed orientation assumptions.
-- Language descriptions as an auxiliary query modality for cross-view matching.
-- A **two-stage retrieval framework**:
-  - Stage 1: global multimodal retrieval.
-  - Stage 2: local region-aware re-ranking.
-- A region-voting mechanism that explicitly searches for query-consistent local regions inside candidate satellite images.
-- Strong performance gains over representative cross-view geolocalization baselines.
-
----
+- Introduces **CVUSA-L2**, a challenging CVUSA setting with random 90° ground crops and language descriptions.
+- Does not assume a panorama, north alignment, or known camera orientation at inference time.
+- Fuses limited-FoV visual evidence and scene-level language using a Global Q-Former.
+- Re-ranks hard satellite candidates with patch-level region voting.
+- Keeps the large image and text encoders frozen and checkpoints only the lightweight trainable modules.
+- Achieves **23.62 R@1**, **49.61 R@5**, **60.41 R@10**, and **82.15 R@1%** on the paper's limited-FoV CVUSA evaluation.
 
 ## Method
 
-### Stage 1 — Global Retrieval
+LG-Align separates full-gallery retrieval from more expensive local matching.
 
-The limited-FoV ground image and its text description are encoded separately and projected into a shared embedding space.
+### Stage 1: language-guided global retrieval
 
-A **Global Q-Former** uses learnable query tokens to fuse the projected ground-image and text features. The resulting query representation is compared with a global satellite embedding using a symmetric InfoNCE objective.
+1. A frozen DINOv3 encoder extracts patch tokens from the limited-FoV ground image.
+2. A frozen FLAN-T5 encoder extracts tokens from its scene description.
+3. Learned projections map both modalities to a shared space.
+4. A Global Q-Former with 32 learnable queries fuses the ground and text tokens.
+5. Mean-pooled query features and a global satellite embedding are trained with symmetric InfoNCE.
 
-This stage efficiently retrieves an initial set of satellite candidates from the full gallery.
+This stage searches the full satellite gallery efficiently and produces the candidate pool used by Stage 2.
 
-### Stage 2 — Local Region Voting
+### Stage 2: local region-voting re-ranking
 
-Stage 2 re-ranks the strongest Stage-1 candidates.
+1. The frozen Stage 1 retriever mines hard satellite candidates.
+2. A Local Q-Former, initialized once from the Stage 1 query pathway, learns tokens specialized for local matching.
+3. A Voting Q-Former cross-attends those query tokens to each candidate's satellite patch tokens.
+4. Token-gated attention forms a spatial vote map.
+5. Local 3 × 3 max pooling converts the strongest query-consistent region into a candidate score.
 
-A **Local Q-Former**, initialized from the Stage-1 Global Q-Former, produces query tokens specialized for local matching. A **Voting Q-Former** then cross-attends these query tokens to satellite patch tokens.
-
-The resulting attention maps are interpreted as spatial votes. After local pooling, the strongest regional response becomes the candidate score.
-
-This allows LG-Align to identify a small satellite region that is consistent with the partial ground observation rather than relying only on global pooled similarity.
-
----
-
-## Dataset
-
-Experiments are conducted on **CVUSA**.
-
-- **44,416** ground-satellite pairs
-- **80%** training split
-- **20%** evaluation split
-- Ground panorama → random **90° FoV crop**
-- Each crop is paired with a generated natural-language scene description
-
-<!-- We refer to this setting as **CVUSA**, representing **Limited FoV + Language descriptions**. -->
-
----
+At inference time, the Stage 2 score is fused with the Stage 1 global score to re-rank only the top candidates.
 
 ## Results
 
-Performance on the random limited-FoV CVUSA evaluation setting:
+Results reported in the paper for the random limited-FoV CVUSA protocol:
 
 | Method | R@1 | R@5 | R@10 | R@1% |
 |---|---:|---:|---:|---:|
-| TransGeo | 20.72 | 42.31 | 51.52 | 81.84 |
 | Sample4Geo | 16.31 | 33.93 | 42.94 | 72.99 |
 | L2LTR | 16.58 | 36.49 | 42.55 | 76.12 |
 | GeoDTR | 13.20 | 30.33 | 39.58 | 73.58 |
-| GeoDTR+ | 8.47 | 322.60* | 31.58 | 69.48 |
+| TransGeo | 20.72 | 42.31 | 51.52 | 81.84 |
 | **LG-Align** | **23.62** | **49.61** | **60.41** | **82.15** |
 
-LG-Align achieves the best reported result across all four retrieval metrics in this evaluation.
+### Ablations
 
-<!-- > **Note:** The current manuscript reports `322.60` for GeoDTR+ R@5, which appears inconsistent with the surrounding recall values. It is reproduced here from the submitted manuscript and should be verified before the public README is finalized. -->
-
----
-
-<!-- ## Ablation Studies -->
-
-### Query Modality
-
-| Variant | R@1 | R@5 | R@10 | R@1% |
+| Query modalities | R@1 | R@5 | R@10 | R@1% |
 |---|---:|---:|---:|---:|
-| w/o text | 15.20 | 39.51 | 52.68 | 80.53 |
-| w/o ground image | 1.94 | 6.95 | 11.59 | 40.45 |
+| Text only | 1.94 | 6.95 | 11.59 | 40.45 |
+| Ground image only | 15.20 | 39.51 | 52.68 | 80.53 |
 | **Ground image + text** | **23.62** | **49.61** | **60.41** | **82.15** |
 
-Language is most effective as **complementary semantic guidance** rather than a replacement for the visual ground query.
-
-### Effect of Stage 2 Re-ranking
-
-| Setting | R@1 | R@5 | R@10 | R@1% |
+| Retrieval stage | R@1 | R@5 | R@10 | R@1% |
 |---|---:|---:|---:|---:|
 | Stage 1 global retrieval | 11.41 | 29.28 | 39.76 | 73.94 |
-| **Stage 1 + Stage 2** | **23.62** | **49.61** | **60.41** | **82.15** |
+| **Stage 1 + Stage 2 re-ranking** | **23.62** | **49.61** | **60.41** | **82.15** |
 
-Stage 2 more than doubles Recall@1, showing the importance of local satellite-region matching under random limited FoV.
+Language supplies complementary semantic context, while region voting more than doubles Stage 1 Recall@1.
 
----
-
-## Model Configuration
-
-Key implementation details reported in the paper:
-
-- Ground image resolution: `224 × 224`
-- Satellite image resolution: `320 × 320`
-- Shared embedding dimension: `768`
-- Global Q-Former:
-  - 32 query tokens
-  - 4 layers
-  - 8 attention heads
-- Local Q-Former:
-  - same architecture as Global Q-Former
-  - initialized from Stage 1
-- Voting Q-Former:
-  - 2 layers
-  - 8 attention heads
-  - token gating
-- Stage 1 training: 20 epochs
-- Stage 2 training: 20 epochs
-- Optimizer: AdamW
-- Stage 1 learning rate: `1e-4`
-- Stage 2 learning rate: `5e-5`
-- Stage 2 candidates per query: 16
-  - 1 positive
-  - 15 hard negatives
-- Hard negatives mined from top-200 Stage-1 retrievals
-- Region pooling window: `3 × 3`
-
----
-
-<!-- ## Repository Structure
+## Repository layout
 
 ```text
-LG-Align/
-├── README.md
-├── index.html
-├── style.css
-├── assets/
-│   ├── figures/
-│   └── ...
-├── paper/
-│   └── paper.pdf
-└── .nojekyll
+LGAlign_Two_Stage/
+├── main.py                 # unified training/evaluation CLI
+├── train.py                # Stage 1 and Stage 2 training
+├── eval.py                 # global retrieval and region-voting evaluation
+├── models/
+│   └── custom_model.py     # DINOv3 + T5/SigLIP2 + Q-Former model
+├── datasets/               # CVUSA, CVACT, VIGOR, and GAMa loaders
+├── configs/                # experiment configurations
+├── crcv_scripts/           # example Slurm jobs
+├── qualitative_cvusa.py    # qualitative retrieval visualization
+└── paper/paper_1.pdf       # manuscript
 ```
 
-The included static project page can be hosted directly with **GitHub Pages**.
+## Installation
 
---- -->
+Clone the repository and create an isolated Python environment:
 
-<!-- ## GitHub Pages
+```bash
+git clone https://github.com/Fahim17/LGAlign_Two_Stage.git
+cd LGAlign_Two_Stage
 
-To publish the project website:
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+pip install -r requirements.txt
+pip install transformers
+```
 
-1. Push this repository to GitHub.
-2. Open **Settings → Pages**.
-3. Under **Build and deployment**, select:
-   - Source: `Deploy from a branch`
-   - Branch: `main`
-   - Folder: `/ (root)`
-4. Save the configuration.
+Choose the PyTorch command appropriate for your CUDA installation from the [official PyTorch installer](https://pytorch.org/get-started/locally/) if CUDA 12.1 is not suitable.
 
-GitHub will then publish the project page from `index.html`. -->
+The default configuration uses gated DINOv3 models from Hugging Face. Request access to both model repositories and authenticate locally:
 
----
+- [`facebook/dinov3-vitl16-pretrain-lvd1689m`](https://huggingface.co/facebook/dinov3-vitl16-pretrain-lvd1689m)
+- [`facebook/dinov3-vitl16-pretrain-sat493m`](https://huggingface.co/facebook/dinov3-vitl16-pretrain-sat493m)
 
-## Code
+```bash
+huggingface-cli login
+```
 
-<!-- Training and evaluation code will be released after the anonymous review period. -->
+Never place a Hugging Face token directly in source code or commit it to Git.
 
----
+## Data preparation
 
-## Paper
+Download CVUSA and arrange the processed limited-FoV data as follows:
 
-**LG-Align: Language-Guided Global Retrieval to Local Region Voting**
+```text
+CVUSA/
+├── splits/
+│   ├── train-19zl.csv
+│   └── val-19zl.csv
+├── lang/
+│   ├── T1_train-19zl.csv
+│   └── T1_val-19zl.csv
+├── streetview/             # limited-FoV ground images
+└── bingmap/                # satellite images
+```
 
-<!-- Anonymous GAIA @ ECCV 2026 Submission. -->
+The split CSV files have no header and use:
 
----
+```text
+<satellite-relative-path>,<ground-relative-path>
+```
+
+Each language CSV must contain a `Text` column aligned row-for-row with its corresponding split. The paper creates each query by taking a random horizontal crop representing a 90° FoV and generates its description with the prompt `Describe the context of the image.`
+
+Before running the code, copy a configuration and edit at least these fields:
+
+```json
+{
+  "data": {
+    "data_root": "/absolute/path/to/CVUSA",
+    "train_csv": "splits/train-19zl.csv",
+    "val_csv": "splits/val-19zl.csv",
+    "lang": "T1"
+  }
+}
+```
+
+For example:
+
+```bash
+cp configs/geo_dino_t5_qformer_5e-05.json configs/my_cvusa_experiment.json
+```
+
+Also update `checkpointing.save_dir`, `logging.log_dir`, and `logging.info_dir` if you want different output locations.
+
+## Training
+
+Run the complete two-stage schedule (20 Stage 1 epochs followed by 20 Stage 2 epochs in the paper configuration):
+
+```bash
+python main.py \
+  --mode train \
+  --config configs/my_cvusa_experiment.json \
+  --gpu-id 0
+```
+
+Stage 1 checkpoints contain only the trainable projections and Q-Former-related weights; the frozen DINOv3 and text encoders are reloaded from Hugging Face. Before Stage 2, the code mines hard negatives from Stage 1 retrievals and caches them beside the source checkpoint.
+
+To skip Stage 1 and start Stage 2 from an existing Stage 1 checkpoint:
+
+```bash
+python main.py \
+  --mode train \
+  --config configs/my_cvusa_experiment.json \
+  --resume-from-stage1 weights/<experiment>/<stage1-checkpoint>.pt \
+  --gpu-id 0
+```
+
+## Evaluation
+
+Evaluate Stage 1 global retrieval only:
+
+```bash
+python main.py \
+  --mode eval \
+  --config configs/my_cvusa_experiment.json \
+  --checkpoint weights/<experiment>/<stage1-checkpoint>.pt \
+  --stage 1 \
+  --gpu-id 0
+```
+
+Evaluate the full global-retrieval and region-voting pipeline:
+
+```bash
+python main.py \
+  --mode eval \
+  --config configs/my_cvusa_experiment.json \
+  --checkpoint weights/<experiment>/<stage2-checkpoint>.pt \
+  --stage 2 \
+  --rerank-topk 200 \
+  --fusion-lambda 0.3 \
+  --gpu-id 0
+```
+
+Useful memory controls for Stage 2 evaluation are `--eval-batch-size`, `--gather-batch-size`, and `--candidate-chunk-size`. The re-ranker can only recover a correct match already present in the Stage 1 top-K candidate set.
+
+## Paper configuration
+
+| Setting | Value |
+|---|---|
+| Ground encoder | DINOv3 ViT-L/16, LVD-1689M (frozen) |
+| Satellite encoder | DINOv3 ViT-L/16, SAT-493M (frozen) |
+| Text encoder | FLAN-T5-Large (frozen) |
+| Ground resolution | 224 × 224 |
+| Satellite resolution | 320 × 320 (20 × 20 patches) |
+| Shared dimension | 768 |
+| Global/Local Q-Former | 32 queries, 4 layers, 8 heads |
+| Voting Q-Former | 2 layers, 8 heads, token gating |
+| Stage 1 / Stage 2 epochs | 20 / 20 |
+| Stage 1 / Stage 2 learning rate | 1e-4 / 5e-5 |
+| Stage 1 / Stage 2 batch size | 150 / 24 |
+| Stage 2 training candidates | 16 (1 positive + 15 hard negatives) |
+| Hard-negative pool | Top 200 Stage 1 candidates |
+| Region window | 3 × 3, max pooling |
+| Temperature | 0.07 for both stages |
 
 ## Citation
 
-<!-- BibTeX will be updated after publication. For the anonymous submission period, you may use:
+If you find this work useful, please cite the paper. Replace the anonymous author field when the final publication metadata is available.
 
 ```bibtex
-@inproceedings{lgalign2026,
+@inproceedings{anonymous2026lgalign,
   title     = {LG-Align: Language-Guided Global Retrieval to Local Region Voting},
   author    = {Anonymous},
-  booktitle = {GAIA @ ECCV},
+  booktitle = {GAIA at ECCV},
   year      = {2026}
 }
-``` -->
-
----
+```
 
 ## Acknowledgements
-<!-- 
-This project builds on the CVUSA benchmark and prior work in cross-view image geolocalization, multimodal retrieval, and vision-language representation learning. -->
 
----
+This project builds on CVUSA, DINOv3, FLAN-T5, and the Q-Former architecture, as well as prior work in cross-view geolocalization and multimodal retrieval.
 
 ## License
 
-<!-- A license will be added when the code and dataset resources are publicly released. -->
+No license has been specified yet. Until a license is added, the repository's contents remain under the copyright holder's default rights.

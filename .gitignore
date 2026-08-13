@@ -49,6 +49,8 @@ qualitative_results/
 wandb/
 runs/
 crcv_scripts/
+paper/
+*.pdf
 *.ckpt
 *.pth
 *.pt
@@ -65,3 +67,4 @@ losses o.py
 main o.py
 train o.py
 run.txt
+README_old.md
