@@ -239,7 +239,7 @@ If you find this work useful, please cite the paper. Replace the anonymous autho
 ```bibtex
 @inproceedings{anonymous2026lgalign,
   title     = {LG-Align: Language-Guided Global Retrieval to Local Region Voting},
-  author    = {Anonymous},
+  author    = {Aleem, Fahimul and Abdullah, Raiyaan and Vyas, Shruti},
   booktitle = {GAIA at ECCV},
   year      = {2026}
 }
