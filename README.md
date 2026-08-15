@@ -237,7 +237,7 @@ Useful memory controls for Stage 2 evaluation are `--eval-batch-size`, `--gather
 If you find this work useful, please cite the paper. Replace the anonymous author field when the final publication metadata is available.
 
 ```bibtex
-@inproceedings{anonymous2026lgalign,
+@inproceedings{fahimul2026lgalign,
   title     = {LG-Align: Language-Guided Global Retrieval to Local Region Voting},
   author    = {Aleem, Fahimul and Abdullah, Raiyaan and Vyas, Shruti},
   booktitle = {GAIA at ECCV},
