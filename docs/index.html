@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="LG-Align: language-guided global retrieval and local region voting for limited-FoV cross-view geolocalization.">
+  <meta name="theme-color" content="#f3efe6">
+  <title>LG-Align · Language-Guided Cross-View Geolocalization</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <a class="brand" href="#top" aria-label="LG-Align home">
+      <span class="brand-mark">LG</span><span>Align</span>
+    </a>
+    <nav aria-label="Primary navigation">
+      <a href="#method">Method</a>
+      <a href="#results">Results</a>
+      <a href="#citation">Citation</a>
+    </nav>
+    <a class="header-link" href="https://github.com/Fahim17/LGAlign_Two_Stage" target="_blank" rel="noreferrer">GitHub <span aria-hidden="true">↗</span></a>
+  </header>
+
+  <main id="main">
+    <section class="hero" id="top">
+      <div class="hero-copy reveal">
+        <p class="eyebrow"><span></span> GAIA @ ECCV 2026</p>
+        <h1>Language guides<br><em>where to look.</em></h1>
+        <p class="lede">A two-stage framework for cross-view geolocalization that retrieves globally, then votes locally—matching a randomly oriented 90° ground view to its satellite location.</p>
+        <div class="hero-actions">
+          <a class="button primary" href="https://github.com/Fahim17/LGAlign_Two_Stage/blob/main/paper/paper_1.pdf" target="_blank" rel="noreferrer">Read the paper <span>↗</span></a>
+          <a class="button secondary" href="https://github.com/Fahim17/LGAlign_Two_Stage" target="_blank" rel="noreferrer">View code <span>↗</span></a>
+        </div>
+      </div>
+
+      <div class="hero-visual reveal" aria-label="Ground panorama and matching satellite image">
+        <div class="coordinate coordinate-a">QUERY / 90° FOV</div>
+        <div class="panorama-wrap">
+          <img src="assets/overview-000.png" alt="A panoramic forest road used as a ground-view query">
+          <div class="crop-window"><span>random crop</span></div>
+        </div>
+        <div class="match-line" aria-hidden="true"><i></i><span>semantic match</span><i></i></div>
+        <div class="satellite-card">
+          <img src="assets/overview-001.png" alt="The corresponding overhead satellite image">
+          <div class="vote-grid" aria-hidden="true">
+            <span></span><span></span><span></span><span></span><span class="hot"></span><span class="warm"></span><span></span><span class="warm"></span><span></span>
+          </div>
+          <div class="rank-badge"><small>RANK</small><strong>01</strong></div>
+        </div>
+        <div class="coordinate coordinate-b">SATELLITE / REGION VOTE</div>
+      </div>
+    </section>
+
+    <section class="problem section-pad">
+      <div class="section-label reveal"><span>01</span> The challenge</div>
+      <div class="problem-grid">
+        <h2 class="reveal">A small view.<br>A world of ambiguity.</h2>
+        <div class="problem-copy reveal">
+          <p>Cross-view geolocalization is already difficult: street-level and overhead images share little direct appearance. Random limited-FoV queries remove even more context—and offer no reliable orientation prior.</p>
+          <p>LG-Align uses language as a viewpoint-invariant bridge, then searches for the local satellite region that best supports the combined visual and semantic evidence.</p>
+        </div>
+        <div class="challenge-list reveal">
+          <article><strong>90°</strong><span>random field of view</span></article>
+          <article><strong>0</strong><span>orientation assumptions</span></article>
+          <article><strong>2</strong><span>retrieval stages</span></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="method section-pad" id="method">
+      <div class="section-label light reveal"><span>02</span> The method</div>
+      <div class="method-heading reveal">
+        <h2>Retrieve the world.<br><em>Inspect the neighborhood.</em></h2>
+        <p>Heavy encoders remain frozen. Lightweight Q-Former modules learn how to fuse modalities and identify discriminative satellite regions.</p>
+      </div>
+
+      <div class="stage stage-one reveal">
+        <div class="stage-number">01</div>
+        <div class="stage-title">
+          <p>Global retrieval</p>
+          <h3>Find the candidates</h3>
+        </div>
+        <div class="pipeline" aria-label="Stage 1 pipeline">
+          <div class="input-stack">
+            <div class="node input"><b>Ground</b><span>DINOv3 tokens</span></div>
+            <div class="node input"><b>Language</b><span>FLAN-T5 tokens</span></div>
+          </div>
+          <div class="arrow">→</div>
+          <div class="node accent"><b>Global Q-Former</b><span>32 learned queries</span></div>
+          <div class="arrow">↔</div>
+          <div class="node satellite"><b>Satellite</b><span>global embedding</span></div>
+        </div>
+        <p class="stage-note">Visual and language tokens are fused into a compact query embedding and trained against the full satellite gallery with symmetric InfoNCE.</p>
+      </div>
+
+      <div class="stage stage-two reveal">
+        <div class="stage-number">02</div>
+        <div class="stage-title">
+          <p>Local re-ranking</p>
+          <h3>Vote for the region</h3>
+        </div>
+        <div class="pipeline" aria-label="Stage 2 pipeline">
+          <div class="node input"><b>Top-200</b><span>hard candidates</span></div>
+          <div class="arrow">→</div>
+          <div class="node accent"><b>Local Q-Former</b><span>query tokens</span></div>
+          <div class="arrow">→</div>
+          <div class="node voting"><b>Voting Q-Former</b><span>3 × 3 region pool</span></div>
+          <div class="arrow">→</div>
+          <div class="node score"><b>Score</b><span>fused re-rank</span></div>
+        </div>
+        <p class="stage-note">Cross-attention becomes a spatial vote map. Sharp local evidence raises a candidate; diffuse responses push it down the ranking.</p>
+      </div>
+    </section>
+
+    <section class="language section-pad">
+      <div class="language-image reveal">
+        <img src="assets/method-000.png" alt="Examples of limited-FoV road images paired with detailed scene descriptions">
+      </div>
+      <div class="language-copy reveal">
+        <div class="section-label"><span>03</span> Language as context</div>
+        <h2>Meaning survives<br>the viewpoint shift.</h2>
+        <p>Descriptions capture roads, buildings, vegetation, vehicles, and spatial layout—signals that remain meaningful even when pixels look radically different from above.</p>
+        <blockquote>“The road curves slightly to the right… brick fences and greenery.”</blockquote>
+      </div>
+    </section>
+
+    <section class="results section-pad" id="results">
+      <div class="section-label reveal"><span>04</span> Results on CVUSA-L2</div>
+      <div class="results-head reveal">
+        <h2>Local evidence<br><em>changes the ranking.</em></h2>
+        <p>Recall (%) on random 90° limited-FoV CVUSA. Higher is better.</p>
+      </div>
+
+      <div class="metric-grid reveal">
+        <article class="metric primary-metric"><span>Recall@1</span><strong>23.62</strong><small>+2.90 over strongest baseline</small></article>
+        <article class="metric"><span>Recall@5</span><strong>49.61</strong><small>+7.30 points</small></article>
+        <article class="metric"><span>Recall@10</span><strong>60.41</strong><small>+8.89 points</small></article>
+        <article class="metric"><span>Recall@1%</span><strong>82.15</strong><small>best overall</small></article>
+      </div>
+
+      <div class="comparison reveal">
+        <div class="comparison-copy">
+          <p class="mini-label">Stage 2 effect · Recall@1</p>
+          <h3>More than <em>2×</em> the top-1 retrieval.</h3>
+          <p>Region voting lifts Recall@1 from 11.41 to 23.62 by resolving globally similar candidates with local satellite evidence.</p>
+        </div>
+        <div class="bars" aria-label="Recall at 1 comparison">
+          <div class="bar-row"><span>Stage 1</span><div class="bar-track"><i style="--value:48.3%"></i></div><b>11.41</b></div>
+          <div class="bar-row active"><span>+ Stage 2</span><div class="bar-track"><i style="--value:100%"></i></div><b>23.62</b></div>
+        </div>
+      </div>
+
+      <div class="table-wrap reveal">
+        <table>
+          <thead><tr><th>Method</th><th>R@1</th><th>R@5</th><th>R@10</th><th>R@1%</th></tr></thead>
+          <tbody>
+            <tr><td>Sample4Geo</td><td>16.31</td><td>33.93</td><td>42.94</td><td>72.99</td></tr>
+            <tr><td>L2LTR</td><td>16.58</td><td>36.49</td><td>42.55</td><td>76.12</td></tr>
+            <tr><td>GeoDTR</td><td>13.20</td><td>30.33</td><td>39.58</td><td>73.58</td></tr>
+            <tr><td>TransGeo</td><td>20.72</td><td>42.31</td><td>51.52</td><td>81.84</td></tr>
+            <tr class="ours"><td>LG-Align <span>ours</span></td><td>23.62</td><td>49.61</td><td>60.41</td><td>82.15</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="details section-pad">
+      <div class="section-label reveal"><span>05</span> At a glance</div>
+      <div class="detail-grid reveal">
+        <article><span>01 / Encoders</span><h3>Specialized, frozen foundations</h3><p>DINOv3 ViT-L/16 for ground and satellite imagery; FLAN-T5-Large for descriptions.</p></article>
+        <article><span>02 / Dataset</span><h3>44,416 paired locations</h3><p>CVUSA panoramas become randomly oriented 90° crops paired with generated language.</p></article>
+        <article><span>03 / Efficiency</span><h3>Train the alignment, not the world</h3><p>Only projections and Q-Former modules are optimized and saved in checkpoints.</p></article>
+      </div>
+    </section>
+
+    <section class="citation section-pad" id="citation">
+      <div class="citation-copy reveal">
+        <div class="section-label light"><span>06</span> Citation</div>
+        <h2>Build on<br>LG-Align.</h2>
+        <p>If this work supports your research, please cite the paper. Publication metadata will be updated after review.</p>
+      </div>
+      <div class="code-card reveal">
+        <button class="copy-button" type="button" data-copy aria-label="Copy BibTeX">Copy</button>
+        <pre><code id="bibtex">@inproceedings{anonymous2026lgalign,
+  title     = {LG-Align: Language-Guided Global
+               Retrieval to Local Region Voting},
+  author    = {Anonymous},
+  booktitle = {GAIA at ECCV},
+  year      = {2026}
+}</code></pre>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <a class="brand footer-brand" href="#top"><span class="brand-mark">LG</span><span>Align</span></a>
+    <p>Language-guided cross-view geolocalization.</p>
+    <div><a href="https://github.com/Fahim17/LGAlign_Two_Stage" target="_blank" rel="noreferrer">Code ↗</a><a href="https://github.com/Fahim17/LGAlign_Two_Stage/blob/main/paper/paper_1.pdf" target="_blank" rel="noreferrer">Paper ↗</a></div>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
