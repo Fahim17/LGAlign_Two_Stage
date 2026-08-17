@@ -7,6 +7,7 @@
 </div>
 
 [![Paper](https://img.shields.io/badge/Paper-PDF-b31b1b.svg)](paper/paper_1.pdf)
+[![Project Page](https://img.shields.io/badge/Project-Page-245b4c.svg)](https://fahim17.github.io/LGAlign_Two_Stage/)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.x-ee4c2c.svg)](https://pytorch.org/)
 
