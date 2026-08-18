@@ -20,7 +20,6 @@ Given a random 90° crop from a ground panorama and a natural-language descripti
 
 ## Highlights
 
-- Introduces **CVUSA-L2**, a challenging CVUSA setting with random 90° ground crops and language descriptions.
 - Does not assume a panorama, north alignment, or known camera orientation at inference time.
 - Fuses limited-FoV visual evidence and scene-level language using a Global Q-Former.
 - Re-ranks hard satellite candidates with patch-level region voting.
