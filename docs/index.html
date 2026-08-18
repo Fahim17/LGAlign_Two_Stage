@@ -20,8 +20,9 @@
     </a>
     <nav aria-label="Primary navigation">
       <a href="#method">Method</a>
+      <a href="#qualitative">Qualitative</a>
+      <a href="#vote-maps">Vote maps</a>
       <a href="#results">Results</a>
-      <a href="#citation">Citation</a>
     </nav>
     <a class="header-link" href="https://github.com/Fahim17/LGAlign_Two_Stage" target="_blank" rel="noreferrer">GitHub <span aria-hidden="true">↗</span></a>
   </header>
@@ -79,6 +80,15 @@
         <p>Heavy encoders remain frozen. Lightweight Q-Former modules learn how to fuse modalities and identify discriminative satellite regions.</p>
       </div>
 
+      <div class="method-detail-grid">
+      <figure class="paper-figure method-overview reveal">
+        <a href="assets/method.png" target="_blank" aria-label="Open the full-resolution method overview">
+          <img src="assets/method.png" alt="LG-Align architecture: Stage 1 global retrieval training followed by Stage 2 hard-negative mining, local query encoding, and region-voting re-ranking" loading="lazy" decoding="async">
+        </a>
+        <figcaption><span>Method overview</span> Select to enlarge.</figcaption>
+      </figure>
+
+      <div class="method-stages">
       <div class="stage stage-one reveal">
         <div class="stage-number">01</div>
         <div class="stage-title">
@@ -115,6 +125,8 @@
         </div>
         <p class="stage-note">Cross-attention becomes a spatial vote map. Sharp local evidence raises a candidate; diffuse responses push it down the ranking.</p>
       </div>
+      </div>
+      </div>
     </section>
 
     <section class="language section-pad">
@@ -129,8 +141,56 @@
       </div>
     </section>
 
+    <section class="qualitative section-pad" id="qualitative">
+      <div class="section-label reveal"><span>04</span> Qualitative analysis</div>
+      <div class="qualitative-heading reveal">
+        <h2>Language moves the match<br><em>toward the right place.</em></h2>
+        <p>Each example compares image-only retrieval with retrieval guided by both the limited-FoV ground image and its description. Green borders mark the correct satellite match; red borders mark incorrect candidates.</p>
+      </div>
+      <div class="qualitative-content">
+      <figure class="paper-figure qualitative-figure reveal">
+        <a href="assets/qualitative_analysis.png" target="_blank" aria-label="Open the full-resolution qualitative analysis">
+          <img src="assets/qualitative_analysis.png" alt="Qualitative top-five satellite retrieval comparisons using only the ground image versus the ground image with language" loading="lazy" decoding="async">
+        </a>
+        <figcaption><span>Top-5 retrieval examples</span> Select to enlarge.</figcaption>
+      </figure>
+      <div class="qualitative-insights reveal">
+        <p class="mini-label">What the examples show</p>
+        <h3>Semantics resolve visual ambiguity.</h3>
+        <p>Limited-FoV road scenes often look alike from ground level. Language adds cues about terrain, road geometry, vegetation, and nearby structures that help distinguish otherwise plausible satellite candidates.</p>
+        <ul>
+          <li><strong>Image only</strong><span>Global appearance produces several visually plausible matches.</span></li>
+          <li><strong>Image + text</strong><span>Semantic context moves the correct location toward the top of the ranking.</span></li>
+          <li><strong>Green border</strong><span>Indicates the ground query's true matching satellite image.</span></li>
+        </ul>
+        <p class="insight-note">The examples also expose remaining failure cases: generic descriptions may still be shared by geographically distant locations.</p>
+      </div>
+      </div>
+    </section>
+
+    <section class="vote-maps section-pad" id="vote-maps">
+      <div class="section-label light reveal"><span>05</span> Stage 2 region voting</div>
+      <div class="vote-map-heading reveal">
+        <h2>See where the model<br><em>casts its vote.</em></h2>
+        <div>
+          <p>Stage 2 turns cross-attention into a spatial vote map over each candidate satellite image. Strong candidates produce a sharp, localized response around a query-consistent region.</p>
+          <p>Poorly ranked candidates produce diffuse or noisy responses without a clear spatial consensus. This contrast shows how local evidence—not global similarity alone—drives the final re-ranking.</p>
+        </div>
+      </div>
+      <figure class="paper-figure vote-map-figure reveal">
+        <a href="assets/votemap.png" target="_blank" aria-label="Open the full-resolution Stage 2 region-voting visualization">
+          <img src="assets/votemap.png" alt="Stage 2 region-voting maps comparing sharply localized top-ranked candidates with diffuse candidates ranked 200" loading="lazy" decoding="async">
+        </a>
+        <figcaption><span>Figure 5 · Stage 2 region-voting maps</span> Reranked 1 shows concentrated evidence; Reranked 200 shows diffuse responses. Select to enlarge.</figcaption>
+      </figure>
+      <div class="vote-map-legend reveal" aria-label="Vote map interpretation">
+        <div><i class="focused-dot"></i><strong>Focused response</strong><span>query-consistent local region</span></div>
+        <div><i class="diffuse-dot"></i><strong>Diffuse response</strong><span>weak spatial agreement</span></div>
+      </div>
+    </section>
+
     <section class="results section-pad" id="results">
-      <div class="section-label reveal"><span>04</span> Results on CVUSA-L2</div>
+      <div class="section-label reveal"><span>06</span> Results on CVUSA</div>
       <div class="results-head reveal">
         <h2>Local evidence<br><em>changes the ranking.</em></h2>
         <p>Recall (%) on random 90° limited-FoV CVUSA. Higher is better.</p>
@@ -170,7 +230,7 @@
     </section>
 
     <section class="details section-pad">
-      <div class="section-label reveal"><span>05</span> At a glance</div>
+      <div class="section-label reveal"><span>07</span> At a glance</div>
       <div class="detail-grid reveal">
         <article><span>01 / Encoders</span><h3>Specialized, frozen foundations</h3><p>DINOv3 ViT-L/16 for ground and satellite imagery; FLAN-T5-Large for descriptions.</p></article>
         <article><span>02 / Dataset</span><h3>44,416 paired locations</h3><p>CVUSA panoramas become randomly oriented 90° crops paired with generated language.</p></article>
@@ -180,7 +240,7 @@
 
     <section class="citation section-pad" id="citation">
       <div class="citation-copy reveal">
-        <div class="section-label light"><span>06</span> Citation</div>
+        <div class="section-label light"><span>08</span> Citation</div>
         <h2>Build on<br>LG-Align.</h2>
         <p>If this work supports your research, please cite the paper. Publication metadata will be updated after review.</p>
       </div>
